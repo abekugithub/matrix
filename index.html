@@ -1,0 +1,143 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Minimal Client</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Main container that auto-initializes -->
+    <div id="matrix-client" class="matrix-client">
+        <!-- Login Form -->
+        <div id="login-form" class="login-form">
+            <div class="login-header">
+                <h1>Matrix Client</h1>
+                <button id="theme-toggle" class="theme-toggle" title="Toggle theme">🌓</button>
+            </div>
+            <form id="login" class="login">
+                <div class="form-group">
+                    <label for="homeserver">Homeserver URL:</label>
+                    <input type="url" id="homeserver" value="https://matrix.orconssystems.net" required>
+                </div>
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" value="@solo:matrix.orconssystems.net" placeholder="@user:server.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit">Login</button>
+                <div id="login-error" class="error-message"></div>
+            </form>
+        </div>
+
+        <!-- Main Chat Interface (hidden initially) -->
+        <div id="main-interface" class="main-interface" style="display: none;">
+            <div class="sidebar">
+                <!-- User info and controls -->
+                <div class="user-info">
+                    <div id="user-avatar" class="user-avatar"></div>
+                    <div class="user-details">
+                        <div id="user-name" class="user-name"></div>
+                        <div id="user-presence" class="user-presence">offline</div>
+                    </div>
+                    <button id="theme-toggle-main" class="theme-toggle" title="Toggle theme">🌓</button>
+                </div>
+
+                <!-- Direct Messages List -->
+                <div class="chat-list">
+                    <div class="chat-list-header">
+                        <h3>Direct Messages</h3>
+                        <button id="new-dm-btn" class="new-dm-btn" title="New DM">+</button>
+                    </div>
+                    <div id="dm-list" class="dm-list"></div>
+                </div>
+
+                <!-- Logout button -->
+                <button id="logout-btn" class="logout-btn">Logout</button>
+            </div>
+
+            <!-- Chat Area -->
+            <div class="chat-area">
+                <div id="chat-header" class="chat-header" style="display: none;">
+                    <div class="chat-user-info">
+                        <div id="chat-user-avatar" class="chat-user-avatar"></div>
+                        <div class="chat-user-details">
+                            <div id="chat-user-name" class="chat-user-name"></div>
+                            <div id="chat-user-presence" class="chat-user-presence"></div>
+                        </div>
+                    </div>
+                    <div class="call-controls">
+                        <button id="mute-mic-btn" class="call-control-btn" style="display: none;" title="Mute microphone">🎤</button>
+<button id="mute-video-btn" class="call-control-btn" style="display: none;" title="Turn off camera">📹</button>
+                        <button id="voice-call-btn" class="call-btn voice-btn" title="Voice call">📞</button>
+                        <button id="video-call-btn" class="call-btn video-btn" title="Video call">📹</button>
+                        <button id="hangup-btn" class="call-btn hangup-btn" title="Hang up" style="display: none;">❌</button>
+                    </div>
+                </div>
+
+                <!-- Video containers for calls -->
+                <div id="video-container" class="video-container" style="display: none;">
+                    <video id="local-video" class="local-video" muted autoplay playsinline></video>
+                    <video id="remote-video" class="remote-video" autoplay playsinline></video>
+                </div>
+
+                <!-- Messages Area -->
+                <div id="messages-container" class="messages-container">
+                    <div class="welcome-message">
+                        <h2>Welcome to Matrix Client</h2>
+                        <p>Select a conversation or start a new direct message to begin chatting.</p>
+                    </div>
+                </div>
+
+                <!-- Typing Indicator -->
+                <div id="typing-indicator" class="typing-indicator" style="display: none;">
+                    <span class="typing-text"></span>
+                </div>
+
+                <!-- Message Input -->
+                <div id="message-input-area" class="message-input-area" style="display: none;">
+                    <div class="input-container">
+                        <button id="file-btn" class="file-btn" title="Attach file">📎</button>
+                        <input type="file" id="file-input" style="display: none;" multiple>
+                        <textarea id="message-input" class="message-input" placeholder="Type a message..." rows="1"></textarea>
+                        <button id="send-btn" class="send-btn" title="Send message">➤</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- New DM Modal -->
+        <div id="new-dm-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Start New Direct Message</h3>
+                    <button id="close-dm-modal" class="close-btn">×</button>
+                </div>
+                <div class="modal-body">
+                    <input type="text" id="dm-user-input" placeholder="@username:server.com" value="@emma:matrix.orconssystems.net" class="dm-user-input">
+                    <button id="start-dm-btn" class="start-dm-btn">Start Chat</button>
+                </div>
+                <div id="dm-error" class="error-message"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <!-- <script src="https://unpkg.com/matrix-js-sdk@32.5.0/lib/browser-matrix.min.js"></script> -->
+     <!-- <script src="https://cdn.jsdelivr.net/npm/@matrix-org/olm@3.2.15/olm.min.js"></script> -->
+    <!-- <script src="matrix-js-sdk-28.0.0.min.js"></script> -->
+     <script src="public/matrix-js-sdk.umd.min.js"></script>
+     <!-- <script type="module">
+        // Import from local node_modules
+        import * as matrixSdk from './node_modules/matrix-js-sdk/lib/index.js';
+     </script> -->
+    <script src="utils.js"></script>
+    <script src="matrix.js"></script>
+    <script src="rtc.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
