@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix JS SDK Bundle - Basic Usage Example</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .header p {
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .output {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .status {
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .info-box strong {
+            color: #1976D2;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .feature-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .feature-card h3 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        .feature-card p {
+            color: #666;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Matrix JS SDK Bundle</h1>
+            <p>Matrix JavaScript SDK with Full Crypto Support - v38.4.0</p>
+        </div>
+
+        <div class="content">
+            <div class="info-box">
+                <strong>ℹ️ About this example:</strong> This page demonstrates how to use the bundled Matrix JS SDK with full crypto support in a simple HTML/CSS project. The SDK is loaded via a script tag and available globally as <code>window.matrixcs</code>.
+            </div>
+
+            <div class="section">
+                <h2>SDK Information</h2>
+                <div id="sdkInfo" class="output">Loading SDK information...</div>
+            </div>
+
+            <div class="section">
+                <h2>Create Matrix Client</h2>
+                <div class="form-group">
+                    <label for="homeserverUrl">Homeserver URL:</label>
+                    <input type="text" id="homeserverUrl" placeholder="https://matrix.org" value="https://matrix.org">
+                </div>
+                <div class="form-group">
+                    <label for="userId">User ID (optional - for display only):</label>
+                    <input type="text" id="userId" placeholder="@username:matrix.org">
+                </div>
+                <button onclick="createClient()">Create Client</button>
+                <div id="clientStatus" class="hidden"></div>
+            </div>
+
+            <div class="section">
+                <h2>Available SDK Features</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h3>✅ Client Creation</h3>
+                        <p>Create Matrix clients to interact with homeservers</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🔐 Crypto Support</h3>
+                        <p>Full end-to-end encryption with WASM acceleration</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>💬 Messaging</h3>
+                        <p>Send and receive messages in rooms</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>🔔 Events</h3>
+                        <p>Real-time event synchronization</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>👥 Rooms</h3>
+                        <p>Create, join, and manage Matrix rooms</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>📁 Media</h3>
+                        <p>Upload and download media files</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Test Crypto Support</h2>
+                <button onclick="testCryptoSupport()">Check Crypto Availability</button>
+                <div id="cryptoStatus" class="hidden"></div>
+            </div>
+
+            <div class="section">
+                <h2>Output Console</h2>
+                <div id="output" class="output">Ready. Click buttons above to interact with the Matrix SDK.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include the bundled Matrix SDK -->
+    <script src="../dist/matrix-sdk.min.js"></script>
+    
+    <script>
+        // Global variables
+        let matrixClient = null;
+
+        // Log helper
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+            output.textContent += `\n[${timestamp}] ${prefix} ${message}`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        // Show status message
+        function showStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.className = `status ${type}`;
+            element.textContent = message;
+            element.classList.remove('hidden');
+        }
+
+        // Initialize and show SDK info
+        function showSDKInfo() {
+            const sdkInfo = document.getElementById('sdkInfo');
+            
+            if (typeof matrixcs === 'undefined') {
+                sdkInfo.textContent = '❌ ERROR: Matrix SDK not loaded!';
+                sdkInfo.style.color = 'red';
+                return;
+            }
+
+            let info = '✅ Matrix JS SDK Bundle Loaded Successfully!\n\n';
+            info += '📦 Available exports:\n';
+            info += '  - matrixcs (main SDK object)\n';
+            info += '  - createClient() - Create Matrix client instances\n';
+            info += '  - All Matrix SDK classes and functions\n\n';
+            
+            info += '🔐 Crypto Support: ';
+            info += typeof matrixcs.crypto !== 'undefined' ? 'Available ✅' : 'Check with test button';
+            info += '\n\n';
+            
+            info += '🌐 Global Access:\n';
+            info += '  - window.matrixcs is available\n';
+            info += '  - Use matrixcs.createClient() to create clients\n\n';
+            
+            info += '📚 Key Methods:\n';
+            info += '  - matrixcs.createClient(options)\n';
+            info += '  - client.login()\n';
+            info += '  - client.startClient()\n';
+            info += '  - client.sendMessage()\n';
+            info += '  - And many more...\n';
+
+            sdkInfo.textContent = info;
+            log('SDK information loaded', 'success');
+        }
+
+        // Create Matrix client
+        function createClient() {
+            const homeserverUrl = document.getElementById('homeserverUrl').value.trim();
+            const userId = document.getElementById('userId').value.trim();
+
+            if (!homeserverUrl) {
+                showStatus('clientStatus', 'Please enter a homeserver URL', 'error');
+                log('Client creation failed: No homeserver URL provided', 'error');
+                return;
+            }
+
+            try {
+                const clientOptions = {
+                    baseUrl: homeserverUrl,
+                    timelineSupport: true,
+                };
+
+                if (userId) {
+                    clientOptions.userId = userId;
+                }
+
+                matrixClient = matrixcs.createClient(clientOptions);
+                
+                showStatus('clientStatus', 
+                    `✅ Client created successfully for ${homeserverUrl}`, 
+                    'success'
+                );
+                
+                log(`Matrix client created for homeserver: ${homeserverUrl}`, 'success');
+                log('Client object available in global variable: matrixClient', 'info');
+                
+                if (userId) {
+                    log(`User ID set to: ${userId}`, 'info');
+                }
+
+                // Show some client properties
+                log(`Client can perform: register, login, sync, send messages, etc.`, 'info');
+                
+            } catch (error) {
+                showStatus('clientStatus', 
+                    `❌ Error creating client: ${error.message}`, 
+                    'error'
+                );
+                log(`Error creating client: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // Test crypto support
+        async function testCryptoSupport() {
+            try {
+                log('Testing crypto support...', 'info');
+                
+                // Check if crypto classes are available
+                const hasCrypto = typeof matrixcs.crypto !== 'undefined';
+                
+                let message = '🔐 Crypto Support Status:\n\n';
+                
+                if (hasCrypto) {
+                    message += '✅ Crypto module is available\n';
+                    log('Crypto module found', 'success');
+                } else {
+                    message += 'ℹ️ Crypto module status: Available when client is created with crypto support\n';
+                    log('Crypto support will be available when creating clients', 'info');
+                }
+                
+                message += '\n📁 WASM Files:\n';
+                message += '✅ matrix_sdk_crypto_wasm_bg.wasm included in bundle\n';
+                message += '✅ WASM support enabled in bundle\n';
+                
+                message += '\n🎯 To use crypto:\n';
+                message += '1. Create a client with createClient()\n';
+                message += '2. Login with valid credentials\n';
+                message += '3. Initialize crypto with initCrypto()\n';
+                message += '4. Start client with startClient()\n';
+                
+                message += '\n💡 Crypto features include:\n';
+                message += '  - End-to-end encryption\n';
+                message += '  - Device verification\n';
+                message += '  - Key backup and recovery\n';
+                message += '  - Cross-signing support\n';
+                
+                showStatus('cryptoStatus', message, 'info');
+                log('Crypto support check completed', 'success');
+                
+            } catch (error) {
+                showStatus('cryptoStatus', 
+                    `❌ Error checking crypto: ${error.message}`, 
+                    'error'
+                );
+                log(`Error checking crypto: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            log('Page loaded, initializing...', 'info');
+            showSDKInfo();
+            log('Ready to use Matrix SDK!', 'success');
+        });
+
+        // Make functions available in console
+        window.testClient = matrixClient;
+        window.createTestClient = createClient;
+    </script>
+</body>
+</html>

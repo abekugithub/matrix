@@ -174,7 +174,7 @@ isVideoMuted() {
 
 
             // // Place the call
-            await call.placeCall(isVideo, isVideo);
+            await call.placeCall(true, isVideo);
 
             // console.log('Call initiated successfully');
             return true;

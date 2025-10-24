@@ -39,7 +39,69 @@
 .msg-video, .msg-audio { max-width: 100%; outline: none; }
 .msg-download { color: var(--link-color, #0b69ff); text-decoration: underline; }
 .message-meta { font-size: 12px; color: #6b7280; margin-top: 4px; }
+.system-message {
+    text-align: center;
+    margin: 0.5rem 0;
+    opacity: 0.7;
+}
 
+.system-text {
+    font-size: 0.85rem;
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+.message-media img,
+.message-media video {
+    max-width: 100%;
+    border-radius: 8px;
+    margin-top: 0.5rem;
+}
+
+.message-call {
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+.file-download {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--text-primary);
+    margin-top: 0.5rem;
+}
+
+.decryption-error {
+    background: #fff3cd;
+    padding: 0.5rem;
+    border-radius: 4px;
+    color: #856404;
+}
+
+.retry-decrypt-btn {
+    margin-left: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.edited {
+    font-size: 0.75rem;
+    opacity: 0.6;
+    font-style: italic;
+}
+
+.unsupported {
+    opacity: 0.5;
+    font-style: italic;
+}
+
+#messages-top-sentinel {
+    height: 1px;
+    width: 100%;
+}
 /* Base styles */
 * {
   margin: 0;

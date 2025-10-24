@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix JS SDK - Advanced Example with Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            border: 2px solid #f0f0f0;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .section h2 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        button {
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .output {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            min-height: 150px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .status {
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-weight: 600;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .warning-box strong {
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Matrix SDK - Advanced Example</h1>
+            <p>Login, Sync, and Send Messages</p>
+        </div>
+
+        <div class="content">
+            <div class="warning-box">
+                <strong>⚠️ Security Notice:</strong> This example uses password-based login for demonstration purposes. 
+                In production, consider using access tokens or SSO. Never hardcode credentials in your application.
+            </div>
+
+            <div class="section">
+                <h2>1. Login to Matrix</h2>
+                <div class="form-group">
+                    <label for="loginHomeserver">Homeserver URL:</label>
+                    <input type="text" id="loginHomeserver" placeholder="https://matrix.org" value="https://matrix.org">
+                </div>
+                <div class="form-group">
+                    <label for="loginUsername">Username:</label>
+                    <input type="text" id="loginUsername" placeholder="your_username">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password:</label>
+                    <input type="password" id="loginPassword" placeholder="your_password">
+                </div>
+                <button onclick="loginUser()" id="loginBtn">Login</button>
+                <button onclick="logoutUser()" id="logoutBtn" disabled>Logout</button>
+                <div id="loginStatus"></div>
+            </div>
+
+            <div class="section">
+                <h2>2. Start Client & Sync</h2>
+                <button onclick="startSync()" id="syncBtn" disabled>Start Syncing</button>
+                <button onclick="stopSync()" id="stopSyncBtn" disabled>Stop Syncing</button>
+                <div id="syncStatus"></div>
+            </div>
+
+            <div class="section">
+                <h2>3. Send Message</h2>
+                <div class="form-group">
+                    <label for="roomId">Room ID:</label>
+                    <input type="text" id="roomId" placeholder="!roomid:homeserver.com">
+                </div>
+                <div class="form-group">
+                    <label for="messageText">Message:</label>
+                    <textarea id="messageText" rows="3" placeholder="Type your message here..."></textarea>
+                </div>
+                <button onclick="sendMessage()" id="sendBtn" disabled>Send Message</button>
+                <div id="sendStatus"></div>
+            </div>
+
+            <div class="section">
+                <h2>Console Output</h2>
+                <button onclick="clearConsole()">Clear Console</button>
+                <div id="console" class="output">Waiting for actions...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include the bundled Matrix SDK -->
+    <script src="../dist/matrix-sdk.min.js"></script>
+    
+    <script>
+        let client = null;
+        let isLoggedIn = false;
+        let isSyncing = false;
+
+        // Console logging
+        function logConsole(message, type = 'info') {
+            const console = document.getElementById('console');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+            console.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+
+        function clearConsole() {
+            document.getElementById('console').textContent = 'Console cleared.\n';
+        }
+
+        function showStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.className = `status ${type}`;
+            element.textContent = message;
+        }
+
+        function updateButtons() {
+            document.getElementById('loginBtn').disabled = isLoggedIn;
+            document.getElementById('logoutBtn').disabled = !isLoggedIn;
+            document.getElementById('syncBtn').disabled = !isLoggedIn || isSyncing;
+            document.getElementById('stopSyncBtn').disabled = !isSyncing;
+            document.getElementById('sendBtn').disabled = !isLoggedIn;
+        }
+
+        // Login function
+        async function loginUser() {
+            const homeserver = document.getElementById('loginHomeserver').value.trim();
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+
+            if (!homeserver || !username || !password) {
+                showStatus('loginStatus', '❌ Please fill in all fields', 'error');
+                logConsole('Login failed: Missing credentials', 'error');
+                return;
+            }
+
+            try {
+                logConsole(`Creating client for ${homeserver}...`, 'info');
+                
+                // Create the client
+                client = matrixcs.createClient({
+                    baseUrl: homeserver,
+                });
+
+                logConsole('Attempting to login...', 'info');
+
+                // Login
+                const response = await client.loginWithPassword(username, password);
+                
+                isLoggedIn = true;
+                updateButtons();
+
+                showStatus('loginStatus', 
+                    `✅ Successfully logged in as ${response.user_id}`, 
+                    'success'
+                );
+                
+                logConsole(`Login successful! User ID: ${response.user_id}`, 'success');
+                logConsole(`Access Token received (hidden for security)`, 'info');
+                logConsole(`Device ID: ${response.device_id}`, 'info');
+
+                // Set up event listeners
+                setupEventListeners();
+
+            } catch (error) {
+                showStatus('loginStatus', 
+                    `❌ Login failed: ${error.message}`, 
+                    'error'
+                );
+                logConsole(`Login error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // Logout function
+        async function logoutUser() {
+            if (!client) return;
+
+            try {
+                logConsole('Logging out...', 'info');
+                
+                if (isSyncing) {
+                    client.stopClient();
+                    isSyncing = false;
+                }
+
+                await client.logout();
+                
+                isLoggedIn = false;
+                updateButtons();
+
+                showStatus('loginStatus', '✅ Successfully logged out', 'success');
+                logConsole('Logout successful', 'success');
+
+                client = null;
+
+            } catch (error) {
+                showStatus('loginStatus', `❌ Logout error: ${error.message}`, 'error');
+                logConsole(`Logout error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // Start syncing
+        async function startSync() {
+            if (!client || !isLoggedIn) {
+                showStatus('syncStatus', '❌ Please login first', 'error');
+                return;
+            }
+
+            try {
+                logConsole('Starting client sync...', 'info');
+                
+                await client.startClient({ initialSyncLimit: 10 });
+                
+                isSyncing = true;
+                updateButtons();
+
+                showStatus('syncStatus', 
+                    '✅ Sync started! Receiving events from server...', 
+                    'success'
+                );
+                
+                logConsole('Client sync started successfully', 'success');
+                logConsole('You will now receive real-time updates', 'info');
+
+            } catch (error) {
+                showStatus('syncStatus', `❌ Sync error: ${error.message}`, 'error');
+                logConsole(`Sync error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // Stop syncing
+        function stopSync() {
+            if (!client) return;
+
+            try {
+                logConsole('Stopping sync...', 'info');
+                
+                client.stopClient();
+                
+                isSyncing = false;
+                updateButtons();
+
+                showStatus('syncStatus', '✅ Sync stopped', 'success');
+                logConsole('Client sync stopped', 'success');
+
+            } catch (error) {
+                showStatus('syncStatus', `❌ Error stopping sync: ${error.message}`, 'error');
+                logConsole(`Error stopping sync: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // Send message
+        async function sendMessage() {
+            const roomId = document.getElementById('roomId').value.trim();
+            const messageText = document.getElementById('messageText').value.trim();
+
+            if (!client || !isLoggedIn) {
+                showStatus('sendStatus', '❌ Please login first', 'error');
+                return;
+            }
+
+            if (!roomId || !messageText) {
+                showStatus('sendStatus', '❌ Please enter room ID and message', 'error');
+                logConsole('Send failed: Missing room ID or message', 'error');
+                return;
+            }
+
+            try {
+                logConsole(`Sending message to room ${roomId}...`, 'info');
+
+                const content = {
+                    body: messageText,
+                    msgtype: 'm.text',
+                };
+
+                const response = await client.sendEvent(roomId, 'm.room.message', content, '');
+
+                showStatus('sendStatus', 
+                    `✅ Message sent! Event ID: ${response.event_id}`, 
+                    'success'
+                );
+                
+                logConsole(`Message sent successfully!`, 'success');
+                logConsole(`Event ID: ${response.event_id}`, 'info');
+
+                // Clear message field
+                document.getElementById('messageText').value = '';
+
+            } catch (error) {
+                showStatus('sendStatus', `❌ Failed to send: ${error.message}`, 'error');
+                logConsole(`Send error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            if (!client) return;
+
+            logConsole('Setting up event listeners...', 'info');
+
+            // Sync state changes
+            client.on('sync', (state, prevState, data) => {
+                logConsole(`Sync state: ${state}`, 'info');
+            });
+
+            // Room events
+            client.on('Room.timeline', (event, room, toStartOfTimeline) => {
+                if (event.getType() === 'm.room.message') {
+                    const sender = event.getSender();
+                    const content = event.getContent();
+                    logConsole(`💬 New message in ${room.name || room.roomId} from ${sender}: ${content.body}`, 'info');
+                }
+            });
+
+            // Error events
+            client.on('error', (error) => {
+                logConsole(`Client error: ${error.message}`, 'error');
+            });
+
+            logConsole('Event listeners configured', 'success');
+        }
+
+        // Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            logConsole('Matrix SDK Advanced Example loaded', 'success');
+            logConsole('Enter your Matrix credentials to begin', 'info');
+            updateButtons();
+        });
+
+        // Make client available in console for debugging
+        window.matrixClient = () => client;
+    </script>
+</body>
+</html>

@@ -47,7 +47,11 @@ class MatrixManager {
     if (this.client.initCrypto) {
       await this.client.initCrypto();
     } else {
+        if(this.client.initRustCrypto){
+            await this.client.initRustCrypto();
+        }else{
       console.warn('initCrypto not available; E2EE will not function.');
+        }
     }
 
     // 4) Handlers + sync
@@ -569,8 +573,9 @@ async fetchMediaAsBlobUrl(mxcUrl) {
     async logout() {
         try {
             if (this.client && this.isLoggedIn) {
-                await this.client.logout();
                 this.client.stopClient();
+                await this.client.logout(true);
+                
             }
             
             this.client = null;
@@ -846,80 +851,358 @@ async fetchMediaAsBlobUrl(mxcUrl) {
     /**
      * Get messages from a room
      */
-    async getRoomMessages(roomId, limit = 50) {
-        try {
-            const room = this.client.getRoom(roomId);
-            if (!room) return [];
+    // async getRoomMessages(roomId, limit = 50) {
+    //     try {
+    //         const room = this.client.getRoom(roomId);
+    //         if (!room) return [];
             
-            const timeline = room.getLiveTimeline().getEvents();
-            const messages = [];
+    //         const timeline = room.getLiveTimeline().getEvents();
+    //         const messages = [];
             
-            const messageEvents = timeline
-                .filter(event => {
-                    const type = event.getType();
-                    return type === 'm.room.message' || type === 'm.room.encrypted';
-                })
-                .slice(-limit);
+    //         const messageEvents = timeline
+    //             .filter(event => {
+    //                 const type = event.getType();
+    //                 return type === 'm.room.message' || type === 'm.room.encrypted';
+    //             })
+    //             .slice(-limit);
             
-            for (const event of messageEvents) {
-                const message = await this.formatEventToMessage(event, room);
-                if (message) {
-                    messages.push(message);
-                }
-            }
+    //         for (const event of messageEvents) {
+    //             const message = await this.formatEventToMessage(event, room);
+    //             if (message) {
+    //                 messages.push(message);
+    //             }
+    //         }
             
-            return messages;
-        } catch (error) {
-            console.error('Error getting room messages:', error);
-            return [];
-        }
-    }
+    //         return messages;
+    //     } catch (error) {
+    //         console.error('Error getting room messages:', error);
+    //         return [];
+    //     }
+    // }
 
+    async getRoomMessages(roomId, limit = 50) {
+    try {
+        const room = this.client.getRoom(roomId);
+        if (!room) return [];
+        
+        const timeline = room.getLiveTimeline().getEvents();
+        const messages = [];
+        
+        const messageEvents = timeline
+            .filter(event => {
+                const type = event.getType();
+                // Include all relevant types
+                return type === 'm.room.message' || 
+                       type === 'm.room.encrypted' ||
+                       type === 'm.reaction' ||
+                       type.startsWith('m.call.') ||
+                       type === 'm.room.member' ||
+                       type === 'm.room.name' ||
+                       type === 'm.room.topic';
+            })
+            .slice(-limit);
+        
+        for (const event of messageEvents) {
+            const message = await this.formatEventToMessage(event, room);
+            if (message) {
+                messages.push(message);
+            }
+        }
+        
+        return messages;
+    } catch (error) {
+        console.error('Error getting room messages:', error);
+        return [];
+    }
+}
+/**
+ * Load older messages (pagination)
+ */
+async loadOlderMessages(roomId, limit = 30) {
+    try {
+        const room = this.client.getRoom(roomId);
+        if (!room) return { messages: [], canLoadMore: false };
+
+        const timeline = room.getLiveTimeline();
+        
+        // Paginate backwards
+        const canLoadMore = await this.client.paginateEventTimeline(timeline, {
+            backwards: true,
+            limit: limit
+        });
+
+        // Get the newly loaded events
+        const allEvents = timeline.getEvents();
+        const messages = [];
+        
+        for (const event of allEvents) {
+            const type = event.getType();
+            if (type === 'm.room.message' || 
+                type === 'm.room.encrypted' ||
+                type === 'm.reaction' ||
+                type.startsWith('m.call.') ||
+                type === 'm.room.member' ||
+                type === 'm.room.name' ||
+                type === 'm.room.topic') {
+                const message = await this.formatEventToMessage(event, room);
+                if (message) messages.push(message);
+            }
+        }
+
+        return { messages, canLoadMore };
+    } catch (error) {
+        console.error('Error loading older messages:', error);
+        return { messages: [], canLoadMore: false };
+    }
+}
+
+async retryDecryption(eventId) {
+    try {
+        const rooms = this.client.getRooms();
+        for (const room of rooms) {
+            const event = room.findEventById(eventId);
+            if (event) {
+                const crypto = this.client.getCrypto?.();
+                if (crypto?.requestRoomKey) {
+                    await crypto.requestRoomKey(event);
+                } else if (this.client.requestRoomKeyForEvent) {
+                    await this.client.requestRoomKeyForEvent(event);
+                }
+                await event.attemptDecryption?.(crypto, { isRetry: true });
+                return true;
+            }
+        }
+    } catch (e) {
+        console.warn('Retry decryption failed', e);
+    }
+    return false;
+}
     /**
      * Format Matrix event to message object
      */
-   async formatEventToMessage(event, room) {
-        const sender = event.getSender();
-        const senderMember = room.getMember(sender);
-if (event.isEncrypted() && event.isDecryptionFailure && event.isDecryptionFailure()) {
-  try { await this.client.requestRoomKeyForEvent?.(event); } catch(e) {}
-  // keep your existing fallback message
-}
-        if (event.isEncrypted() && (event.isDecryptionFailure() )) {
-            const unsigned = event.getUnsigned?.() || {};
-            const errText = unsigned.decryption_error || "The sender's device has not sent us the keys for this message.";
-            return {
-                eventId: event.getId(),
-                type: 'm.notice',
-                content: `🔒 Unable to decrypt: ${errText}`,
-                senderId: sender,
-                senderName: senderMember?.rawDisplayName || sender,
-                timestamp: event.getTs(),
-                isOwn: sender === this.currentUserId,
-                isDecryptionFailure: true,
-            };
+//    async formatEventToMessage(event, room) {
+//         const sender = event.getSender();
+//         const senderMember = room.getMember(sender);
+        
+// if (event.isEncrypted() && event.isDecryptionFailure && event.isDecryptionFailure()) {
+//   try { await this.client.requestRoomKeyForEvent?.(event); } catch(e) {}
+//   // keep your existing fallback message
+// }
+//         if (event.isEncrypted() && (event.isDecryptionFailure() )) {
+//             const unsigned = event.getUnsigned?.() || {};
+//             const errText = unsigned.decryption_error || "The sender's device has not sent us the keys for this message.";
+//             return {
+//                 eventId: event.getId(),
+//                 type: 'm.notice',
+//                 content: `🔒 Unable to decrypt: ${errText}`,
+//                 senderId: sender,
+//                 senderName: senderMember?.rawDisplayName || sender,
+//                 timestamp: event.getTs(),
+//                 isOwn: sender === this.currentUserId,
+//                 isDecryptionFailure: true,
+//             };
+//         }
+
+//         const content = event.getContent?.() || {};
+//         return {
+//             eventId: event.getId(),
+//             type: content.msgtype || 'm.text',
+//             content: content.body || '',
+//             senderId: sender,
+//             senderName: senderMember?.rawDisplayName || sender,
+//             timestamp: event.getTs(),
+//             isOwn: sender === this.currentUserId,
+//             url: content.url || null,
+//             info: content.info || {},
+//             filename: content.filename || content.body || null,
+//             filesize: content.info?.size || 0,
+//             mimetype: content.info?.mimetype || null,
+//             file: content.file || null, // for encrypted media
+//             thumbnail_url: content.info?.thumbnail_url || null,
+//             thumbnail_file: content.info?.thumbnail_file || null,
+//         };
+//     }
+async formatEventToMessage(event, room) {
+    const sender = event.getSender();
+    const senderMember = room.getMember(sender);
+    const type = event.getType();
+    const content = event.getContent?.() || {};
+    const ts = event.getTs();
+    const eventId = event.getId();
+
+    // Decryption failure handling
+    if (event.isEncrypted?.() && event.isDecryptionFailure?.()) {
+        try {
+            const crypto = this.client.getCrypto?.();
+            if (crypto?.requestRoomKey) {
+                await crypto.requestRoomKey(event);
+            } else if (this.client.requestRoomKeyForEvent) {
+                await this.client.requestRoomKeyForEvent(event);
+            }
+        } catch (e) {
+            console.warn('Key request failed', e);
         }
 
-        const content = event.getContent?.() || {};
+        const unsigned = event.getUnsigned?.() || {};
+        const errText = unsigned.decryption_error || event.decryptionFailureReason || 
+                       "Unable to decrypt: keys not available.";
         return {
-            eventId: event.getId(),
-            type: content.msgtype || 'm.text',
-            content: content.body || '',
+            eventId,
+            kind: 'error',
+            type: 'm.notice',
+            content: `🔒 ${errText}`,
             senderId: sender,
             senderName: senderMember?.rawDisplayName || sender,
-            timestamp: event.getTs(),
+            timestamp: ts,
             isOwn: sender === this.currentUserId,
-            url: content.url || null,
-            info: content.info || {},
-            filename: content.filename || content.body || null,
-            filesize: content.info?.size || 0,
-            mimetype: content.info?.mimetype || null,
-            file: content.file || null, // for encrypted media
-            thumbnail_url: content.info?.thumbnail_url || null,
-            thumbnail_file: content.info?.thumbnail_file || null,
+            isDecryptionFailure: true,
         };
     }
 
+    // m.room.message (text, media, etc.)
+    if (type === 'm.room.message') {
+        const msgtype = content.msgtype;
+        const relates = content['m.relates_to'] || {};
+
+        // Handle edits
+        if (relates.rel_type === 'm.replace' && content['m.new_content']) {
+            return {
+                eventId,
+                kind: 'edit',
+                targetEventId: relates.event_id,
+                newContent: content['m.new_content'],
+                senderId: sender,
+                senderName: senderMember?.rawDisplayName || sender,
+                timestamp: ts,
+                isOwn: sender === this.currentUserId,
+            };
+        }
+
+        // Handle replies
+        const inReplyTo = relates['m.in_reply_to']?.event_id;
+
+        // Text messages
+        if (msgtype === 'm.text' || msgtype === 'm.notice' || msgtype === 'm.emote') {
+            return {
+                eventId,
+                kind: 'text',
+                type: msgtype,
+                content: content.body || '',
+                html: content.format === 'org.matrix.custom.html' ? content.formatted_body : null,
+                inReplyTo,
+                senderId: sender,
+                senderName: senderMember?.rawDisplayName || sender,
+                timestamp: ts,
+                isOwn: sender === this.currentUserId,
+            };
+        }
+
+        // Media messages
+        if (msgtype === 'm.image' || msgtype === 'm.video' || msgtype === 'm.audio' || msgtype === 'm.file') {
+            return {
+                eventId,
+                kind: 'media',
+                mediaType: msgtype,
+                content: content.body || 'file',
+                url: content.url || null,
+                file: content.file || null, // encrypted
+                info: content.info || {},
+                thumbnail_url: content.info?.thumbnail_url || null,
+                thumbnail_file: content.info?.thumbnail_file || null,
+                filename: content.filename || content.body || 'file',
+                filesize: content.info?.size || 0,
+                mimetype: content.info?.mimetype || null,
+                inReplyTo,
+                senderId: sender,
+                senderName: senderMember?.rawDisplayName || sender,
+                timestamp: ts,
+                isOwn: sender === this.currentUserId,
+            };
+        }
+
+        // Location
+        if (msgtype === 'm.location') {
+            return {
+                eventId,
+                kind: 'location',
+                geoUri: content.geo_uri,
+                content: content.body || 'Location',
+                senderId: sender,
+                senderName: senderMember?.rawDisplayName || sender,
+                timestamp: ts,
+                isOwn: sender === this.currentUserId,
+            };
+        }
+    }
+
+    // Reactions
+    if (type === 'm.reaction') {
+        const rel = content['m.relates_to'] || {};
+        return {
+            eventId,
+            kind: 'reaction',
+            key: rel.key,
+            targetEventId: rel.event_id,
+            senderId: sender,
+            senderName: senderMember?.rawDisplayName || sender,
+            timestamp: ts,
+            isOwn: sender === this.currentUserId,
+        };
+    }
+
+    // Call events
+    if (type.startsWith('m.call.')) {
+        return {
+            eventId,
+            kind: 'call',
+            callType: type,
+            content: content,
+            senderId: sender,
+            senderName: senderMember?.rawDisplayName || sender,
+            timestamp: ts,
+            isOwn: sender === this.currentUserId,
+        };
+    }
+
+    // State events (member changes, name, topic)
+    if (type === 'm.room.member') {
+        const membership = content.membership;
+        const stateKey = event.getStateKey();
+        return {
+            eventId,
+            kind: 'system',
+            subtype: 'member',
+            membership,
+            stateKey,
+            displayName: content.displayname,
+            senderId: sender,
+            timestamp: ts,
+        };
+    }
+
+    if (type === 'm.room.name' || type === 'm.room.topic' || type === 'm.room.avatar') {
+        return {
+            eventId,
+            kind: 'system',
+            subtype: type,
+            content,
+            senderId: sender,
+            timestamp: ts,
+        };
+    }
+
+    // Unknown/unsupported
+    return {
+        eventId,
+        kind: 'unknown',
+        type,
+        content: JSON.stringify(content),
+        senderId: sender,
+        senderName: senderMember?.rawDisplayName || sender,
+        timestamp: ts,
+        isOwn: sender === this.currentUserId,
+    };
+}
     /**
      * Send a text message to a room
      */
@@ -1038,50 +1321,117 @@ if (event.isEncrypted() && event.isDecryptionFailure && event.isDecryptionFailur
         return this.currentUserId;
     }
 
-    /**
-     * Acknowledge all unknown devices in a room (for E2EE)
-     */
-    async acknowledgeDevicesInRoom(roomId) {
-        try {
-            const room = this.client.getRoom(roomId);
-            if (!room) return;
+    // /**
+    //  * Acknowledge all unknown devices in a room (for E2EE)
+    //  */
+    // async acknowledgeDevicesInRoom(roomId) {
+    //     try {
+    //         const room = this.client.getRoom(roomId);
+    //         if (!room) return;
             
-            const members = room.getJoinedMembers();
-            for (const member of members) {
-                const userId = member.userId;
-                if (userId === this.currentUserId) continue; // skip self
+    //         const members = room.getJoinedMembers();
+    //         for (const member of members) {
+    //             const userId = member.userId;
+    //             if (userId === this.currentUserId) continue; // skip self
                 
-                try {
-                    const devices = await this.client.getStoredDevicesForUser(userId);
-                    for (const device of devices) {
-                        const isKnown = this.client.isDeviceKnown(userId, device.deviceId);
-                        if (!isKnown) {
-                            console.log(`Acknowledging device: ${userId} / ${device.deviceId}`);
-                            await this.client.setDeviceKnown(userId, device.deviceId, true);
+    //             try {
+    //                 const devices = await this.client.getStoredDevicesForUser(userId);
+    //                 for (const device of devices) {
+    //                     const isKnown = this.client.isDeviceKnown(userId, device.deviceId);
+    //                     if (!isKnown) {
+    //                         console.log(`Acknowledging device: ${userId} / ${device.deviceId}`);
+    //                         await this.client.setDeviceKnown(userId, device.deviceId, true);
+    //                     }
+    //                 }
+    //             } catch (err) {
+    //                 console.warn(`Could not get devices for ${userId}:`, err);
+    //             }
+    //         }
+            
+    //         // Request keys again for failing events
+    //         for (const ev of room.getLiveTimeline().getEvents()) {
+    //             if (ev.isEncrypted() && (ev.isDecryptionFailure() )) {
+    //                 try { await this.client.requestRoomKeyForEvent?.(ev); } catch {}
+    //                 try {
+    //                     this.client.cancelAndResendEventRoomKeyRequest?.(ev.getId());
+    //                 } catch (e) {
+    //                     console.warn('Key re-request failed for', ev.getId(), e);
+    //                 }
+    //             }
+    //         }
+            
+    //         console.log('All devices acknowledged for room:', roomId);
+    //     } catch (error) {
+    //         console.error('Error acknowledging devices:', error);
+    //     }
+    // }
+
+async acknowledgeDevicesInRoom(roomId) {
+    try {
+        const room = this.client.getRoom(roomId);
+        if (!room) return;
+
+        const crypto = this.client.getCrypto?.();
+        if (!crypto) {
+            console.warn('Crypto not available');
+            return;
+        }
+
+        const members = room.getJoinedMembers();
+        
+        for (const member of members) {
+            const userId = member.userId;
+            if (userId === this.currentUserId) continue;
+            
+            try {
+                // Get devices (no downloadKeys in your build, use cached)
+                const deviceMap = await crypto.getUserDevices(userId);
+                if (!deviceMap || deviceMap.size === 0) continue;
+
+                for (const [deviceId] of deviceMap.entries()) {
+                    const status = await await crypto.getDeviceVerificationStatus(userId, deviceId);
+                    
+                    // Check if device is trusted (any of these flags being true means it's "known")
+                    const isTrusted = status.localVerified || status.crossSigningVerified || status.tofu;
+                    
+                    if (!isTrusted) {
+                        console.log(`Marking device trusted (TOFU): ${userId} / ${deviceId}`);
+                        
+                        // Try multiple APIs to set trust
+                        let marked = false;
+                        
+                        // Option 1: client.setDeviceVerified (legacy, may exist)
+                        if (typeof crypto.setDeviceVerified === 'function') {
+                            await crypto.setDeviceVerified(userId, deviceId, true);
+                            marked = true;
+                        }
+                        // Option 2: crypto.setDeviceTrust (some Olm builds)
+                        else if (typeof crypto.setDeviceTrust === 'function') {
+                            await crypto.setDeviceTrust(userId, deviceId, { localVerified: true });
+                            marked = true;
+                        }
+                        // Option 3: client.setDeviceKnown (older API)
+                        else if (typeof this.client.setDeviceKnown === 'function') {
+                            await this.client.setDeviceKnown(userId, deviceId, true);
+                            marked = true;
+                        }
+                        
+                        if (!marked) {
+                            console.warn(`No API available to mark device trusted: ${userId}/${deviceId}`);
+                            console.warn('User must verify devices manually in Element or another client.');
                         }
                     }
-                } catch (err) {
-                    console.warn(`Could not get devices for ${userId}:`, err);
                 }
+            } catch (err) {
+                console.warn(`Could not process devices for ${userId}:`, err);
             }
-            
-            // Request keys again for failing events
-            for (const ev of room.getLiveTimeline().getEvents()) {
-                if (ev.isEncrypted() && (ev.isDecryptionFailure() )) {
-                    try { await this.client.requestRoomKeyForEvent?.(ev); } catch {}
-                    try {
-                        this.client.cancelAndResendEventRoomKeyRequest?.(ev.getId());
-                    } catch (e) {
-                        console.warn('Key re-request failed for', ev.getId(), e);
-                    }
-                }
-            }
-            
-            console.log('All devices acknowledged for room:', roomId);
-        } catch (error) {
-            console.error('Error acknowledging devices:', error);
         }
+        
+        console.log('Device acknowledgement complete for room:', roomId);
+    } catch (error) {
+        console.error('Error acknowledging devices:', error);
     }
+}
 
     /**
      * Create image element
@@ -1154,52 +1504,155 @@ if (event.isEncrypted() && event.isDecryptionFailure && event.isDecryptionFailur
         while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
         return `${n.toFixed(n >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
     }
-    /**
- * Mark all unknown devices in a room as known (acknowledge risk).
- * Note: This does NOT verify devices, it only marks them known so encryption can proceed.
+//     /**
+//  * Mark all unknown devices in a room as known (acknowledge risk).
+//  * Note: This does NOT verify devices, it only marks them known so encryption can proceed.
+//  */
+// async acknowledgeUnknownDevicesInRoom(roomId) {
+//     const room = this.client.getRoom(roomId);
+//     if (!room) return;
+
+//     // Get joined members
+//     const members = room.getJoinedMembers().map(m => m.userId);
+
+//     // Fetch latest devices for each member and mark unknown devices as known
+//     for (const userId of members) {
+//         try {
+//             // Download device list to ensure we have up-to-date device info
+//             await this.client.downloadKeys([userId], true);
+
+//             // Newer SDKs expose getStoredDevicesForUser; fallback to legacy lookup if needed
+//             const devices = this.client.getStoredDevicesForUser
+//                 ? await this.client.getStoredDevicesForUser(userId)
+//                 : (this.client.getCrypto()?.deviceList?.getUserDevices(userId) || []);
+
+//             // devices can be array or map-like depending on API; normalize to array of { deviceId }
+//             const deviceList = Array.isArray(devices)
+//                 ? devices
+//                 : Object.values(devices || {});
+
+//             for (const d of deviceList) {
+//                 const deviceId = d.deviceId || d.device_id;
+//                 if (!deviceId) continue;
+
+//                 // Some SDKs have isDeviceKnown; if not, treat as unknown unless marked already
+//                 const isKnown = this.client.isDeviceKnown
+//                     ? this.client.isDeviceKnown(userId, deviceId)
+//                     : (this.client.getCrypto()?.getDeviceVerificationStatus?.(userId, deviceId)?.known ?? false);
+
+//                 if (!isKnown) {
+//                     console.warn(`Marking device known: ${userId} / ${deviceId}`);
+//                     await this.client.setDeviceKnown(userId, deviceId, true);
+//                 }
+//             }
+//         } catch (e) {
+//             console.warn(`Could not process devices for ${userId}:`, e);
+//         }
+//     }
+// }
+/**
+ * Mark all unknown devices in a room as KNOWN (unverified) so you can send E2EE.
+ * This is TOFU: not secure verification. Prefer interactive verification in UI later.
+ */
+/**
+ * Acknowledge all unknown devices in a room (for E2EE)
+ * Works with v28–v38, auto-detects available APIs
  */
 async acknowledgeUnknownDevicesInRoom(roomId) {
-    const room = this.client.getRoom(roomId);
-    if (!room) return;
+    try {
+        const room = this.client.getRoom(roomId);
+        if (!room) return;
 
-    // Get joined members
-    const members = room.getJoinedMembers().map(m => m.userId);
+        const crypto = this.client.getCrypto?.();
+        const members = room.getJoinedMembers();
+        
+        for (const member of members) {
+            const userId = member.userId;
+            if (userId === this.currentUserId) continue;
+            
+            try {
+                // Download keys (try both APIs)
+                if (crypto?.downloadKeys) {
+                    await crypto.downloadKeys([userId]); // v38 rust-crypto
+                } else if (this.client.downloadKeys) {
+                    await this.client.downloadKeys([userId]); // v28/legacy
+                }
 
-    // Fetch latest devices for each member and mark unknown devices as known
-    for (const userId of members) {
-        try {
-            // Download device list to ensure we have up-to-date device info
-            await this.client.downloadKeys([userId], true);
+                // Get devices (try multiple APIs)
+                let devices = [];
+                if (crypto?.getUserDevices) {
+                    // v38 rust-crypto: returns Map<deviceId, Device>
+                    const deviceMap = await crypto.getUserDevices(userId);
+                    devices = deviceMap ? Array.from(deviceMap.entries()).map(([id, dev]) => ({ deviceId: id, device: dev })) : [];
+                } else if (this.client.getStoredDevicesForUser) {
+                    // v28/legacy: returns array
+                    devices = (await this.client.getStoredDevicesForUser(userId) || []).map(d => ({ deviceId: d.deviceId, device: d }));
+                } else if (crypto?.deviceList?.getStoredDevicesForUser) {
+                    // Some intermediate builds
+                    devices = (crypto.deviceList.getStoredDevicesForUser(userId) || []).map(d => ({ deviceId: d.deviceId, device: d }));
+                }
 
-            // Newer SDKs expose getStoredDevicesForUser; fallback to legacy lookup if needed
-            const devices = this.client.getStoredDevicesForUser
-                ? await this.client.getStoredDevicesForUser(userId)
-                : (this.client.getCrypto()?.deviceList?.getUserDevices(userId) || []);
+                // Mark unknown devices as known
+                for (const { deviceId } of devices) {
+                    if (!deviceId) continue;
 
-            // devices can be array or map-like depending on API; normalize to array of { deviceId }
-            const deviceList = Array.isArray(devices)
-                ? devices
-                : Object.values(devices || {});
+                    // Check if known (try multiple APIs)
+                    let isKnown = false;
+                    if (crypto?.getDeviceVerificationStatus) {
+                        // v38 rust-crypto
+                        const status = crypto.getDeviceVerificationStatus(userId, deviceId);
+                        isKnown = status?.known === true;
+                    } else if (this.client.isDeviceKnown) {
+                        // v28/legacy
+                        isKnown = this.client.isDeviceKnown(userId, deviceId);
+                    }
 
-            for (const d of deviceList) {
-                const deviceId = d.deviceId || d.device_id;
-                if (!deviceId) continue;
-
-                // Some SDKs have isDeviceKnown; if not, treat as unknown unless marked already
-                const isKnown = this.client.isDeviceKnown
-                    ? this.client.isDeviceKnown(userId, deviceId)
-                    : (this.client.getCrypto()?.getDeviceVerificationStatus?.(userId, deviceId)?.known ?? false);
-
-                if (!isKnown) {
-                    console.warn(`Marking device known: ${userId} / ${deviceId}`);
-                    await this.client.setDeviceKnown(userId, deviceId, true);
+                    if (!isKnown) {
+                        console.log(`Acknowledging device: ${userId} / ${deviceId}`);
+                        
+                        // Set known (try multiple APIs)
+                        if (crypto?.setDeviceVerification) {
+                            // v38 rust-crypto
+                            await crypto.setDeviceVerification(userId, deviceId, {
+                                known: true,
+                                verified: false,
+                                blocked: false,
+                            });
+                        } else if (this.client.setDeviceKnown) {
+                            // v28/legacy
+                            await this.client.setDeviceKnown(userId, deviceId, true);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn(`Could not process devices for ${userId}:`, err);
+            }
+        }
+        
+        // Request keys for failed decryption events
+        const timeline = room.getLiveTimeline();
+        if (timeline) {
+            for (const ev of timeline.getEvents()) {
+                if (ev.isEncrypted?.() && ev.isDecryptionFailure?.()) {
+                    try {
+                        if (crypto?.requestRoomKey) {
+                            await crypto.requestRoomKey(ev);
+                        } else if (this.client.requestRoomKeyForEvent) {
+                            await this.client.requestRoomKeyForEvent(ev);
+                        }
+                    } catch (e) {
+                        console.warn('Key request failed for event', ev.getId(), e);
+                    }
                 }
             }
-        } catch (e) {
-            console.warn(`Could not process devices for ${userId}:`, e);
         }
+        
+        console.log('All devices acknowledged for room:', roomId);
+    } catch (error) {
+        console.error('Error acknowledging devices:', error);
     }
 }
+
 }
 
 // Export for use in other modules

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quick Matrix SDK Test</title>
+</head>
+<body>
+    <h1>Matrix JS SDK Quick Test</h1>
+    <div id="status">Testing...</div>
+    
+    <script src="matrix-sdk.min.js"></script>
+    <script>
+        const statusDiv = document.getElementById('status');
+        
+        // Test if SDK is loaded
+        if (typeof matrixcs !== 'undefined') {
+            statusDiv.innerHTML = '<h2 style="color: green;">✅ Matrix SDK loaded successfully!</h2>';
+            statusDiv.innerHTML += '<p>Version: 38.4.0</p>';
+            statusDiv.innerHTML += '<p>Global object "matrixcs" is available</p>';
+            
+            // Test client creation
+            try {
+                const client = matrixcs.createClient({
+                    baseUrl: "https://matrix.org"
+                });
+                statusDiv.innerHTML += '<p style="color: green;">✅ Client created successfully!</p>';
+                statusDiv.innerHTML += '<p>Client object: ' + typeof client + '</p>';
+            } catch(e) {
+                statusDiv.innerHTML += '<p style="color: red;">❌ Client creation failed: ' + e.message + '</p>';
+            }
+        } else {
+            statusDiv.innerHTML = '<h2 style="color: red;">❌ Matrix SDK not loaded!</h2>';
+        }
+    </script>
+</body>
+</html>

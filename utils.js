@@ -407,6 +407,52 @@ async function retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
             await sleep(delay);
         }
     }
+    /**
+ * Convert mxc:// URL to HTTP(S)
+ */
+function mxcToHttp(baseUrl, mxcUrl, thumbnail = null) {
+    const match = mxcUrl.match(/^mxc:\/\/([^/]+)\/(.+)$/);
+    if (!match) return null;
+    const [, server, mediaId] = match;
+    
+    if (thumbnail) {
+        return `${baseUrl}/_matrix/media/v3/thumbnail/${server}/${mediaId}?width=${thumbnail.width}&height=${thumbnail.height}&method=${thumbnail.method || 'scale'}`;
+    }
+    return `${baseUrl}/_matrix/media/v3/download/${server}/${mediaId}`;
+}
+
+/**
+ * Get media URL (handles encrypted and unencrypted)
+ */
+async function getMediaUrl(client, baseUrl, url, file, thumbnail = null) {
+    try {
+        // Encrypted media
+        if (file) {
+            const blob = await client.downloadEncryptedContent(file);
+            return URL.createObjectURL(blob);
+        }
+        
+        // Unencrypted media
+        if (!url) return null;
+        
+        const httpUrl = mxcToHttp(baseUrl, url, thumbnail);
+        if (!httpUrl) return null;
+        
+        const response = await fetch(httpUrl, {
+            headers: {
+                'Authorization': `Bearer ${client.getAccessToken?.()}`
+            }
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+    } catch (error) {
+        console.error('Error loading media:', error);
+        return null;
+    }
+}
 }
 
 // Export utility functions for use in other modules

@@ -1,0 +1,25 @@
+{
+  "name": "matrix_js_sdk_bundle",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "build": "webpack --config webpack.config.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "matrix-js-sdk": "^38.4.0"
+  },
+  "devDependencies": {
+    "copy-webpack-plugin": "^13.0.1",
+    "terser-webpack-plugin": "^5.3.14",
+    "webpack": "^5.102.1",
+    "webpack-cli": "^6.0.1"
+  }
+}

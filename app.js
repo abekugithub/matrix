@@ -576,12 +576,14 @@ function showChatInterface() {
 /**
  * Load and display messages for a room (updated to handle async message creation)
  */
+let isLoadingOlder = false;
+let canLoadMore = true;
+
 async function loadMessages(roomId) {
     if (!matrixClient || !roomId) return;
     
     try {
         const messages = await matrixClient.getRoomMessages(roomId);
-        console.log('messages', messages);
         const messagesContainer = document.getElementById('messages-container');
         
         if (!messagesContainer) return;
@@ -589,25 +591,94 @@ async function loadMessages(roomId) {
         // Clear existing messages
         messagesContainer.innerHTML = '';
         
+        // Add top sentinel for infinite scroll
+        const topSentinel = document.createElement('div');
+        topSentinel.id = 'messages-top-sentinel';
+        topSentinel.style.height = '1px';
+        messagesContainer.appendChild(topSentinel);
+        
         if (messages.length === 0) {
-            messagesContainer.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">No messages yet. Start the conversation!</div>';
+            messagesContainer.innerHTML += '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">No messages yet. Start the conversation!</div>';
             return;
         }
         
-        // Add each message (now async)
+        // Add each message
         for (const message of messages) {
             const messageElement = await createMessageElement(message);
-            messagesContainer.appendChild(messageElement);
+            if (messageElement) messagesContainer.appendChild(messageElement);
         }
         
         // Scroll to bottom
         scrollToBottom();
+        
+        // Setup infinite scroll observer
+        setupInfiniteScroll(roomId);
         
     } catch (error) {
         console.error('Error loading messages:', error);
     }
 }
 
+function setupInfiniteScroll(roomId) {
+    const topSentinel = document.getElementById('messages-top-sentinel');
+    const messagesContainer = document.getElementById('messages-container');
+    
+    if (!topSentinel || !messagesContainer) return;
+    
+    const observer = new IntersectionObserver(async (entries) => {
+        for (const entry of entries) {
+            console.log('older sentinel',entry.isIntersecting , canLoadMore , !isLoadingOlder);
+            if (entry.isIntersecting && canLoadMore && !isLoadingOlder) {
+                await loadOlderMessages(roomId);
+            }
+        }
+    }, {
+        root: messagesContainer,
+        threshold: 0.1
+    });
+    
+    observer.observe(topSentinel);
+}
+
+async function loadOlderMessages(roomId) {
+    if (isLoadingOlder || !canLoadMore) return;
+    
+    isLoadingOlder = true;
+    const messagesContainer = document.getElementById('messages-container');
+    const prevScrollHeight = messagesContainer.scrollHeight;
+    const prevScrollTop = messagesContainer.scrollTop;
+    
+    try {
+        const result = await matrixClient.loadOlderMessages(roomId, 10);
+        canLoadMore = result.canLoadMore;
+        
+        // Find new messages (ones not already in DOM)
+        const existingIds = new Set(
+            Array.from(messagesContainer.querySelectorAll('[data-event-id]'))
+                .map(el => el.dataset.eventId)
+        );
+        
+        const newMessages = result.messages.filter(m => !existingIds.has(m.eventId));
+        
+        // Insert at top (after sentinel)
+        const topSentinel = document.getElementById('messages-top-sentinel');
+        for (const message of newMessages) {
+            const messageElement = await createMessageElement(message);
+            if (messageElement) {
+                messagesContainer.insertBefore(messageElement, topSentinel.nextSibling);
+            }
+        }
+        
+        // Preserve scroll position
+        const newScrollHeight = messagesContainer.scrollHeight;
+        messagesContainer.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
+        
+    } catch (error) {
+        console.error('Error loading older messages:', error);
+    } finally {
+        isLoadingOlder = false;
+    }
+}
 /**
  * Create a message element
  */
@@ -615,7 +686,6 @@ async function loadMessages(roomId) {
 //     const messageDiv = document.createElement('div');
 //     messageDiv.className = `message ${message.isOwn ? 'own' : ''}`;
 //     messageDiv.dataset.eventId = message.eventId;
-    
 //     const avatar = getInitials(message.senderName || message.senderId);
 //     const timestamp = formatTimestamp(message.timestamp);
     
@@ -634,37 +704,277 @@ async function loadMessages(roomId) {
     
 //     return messageDiv;
 // }
-
 /**
  * Create a message element (updated to handle async formatting)
  */
 async function createMessageElement(message) {
     const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${message.isOwn ? 'own' : ''}`;
+    messageDiv.className = `message ${message.isOwn ? 'own' : 'other-message'}`;
     messageDiv.dataset.eventId = message.eventId;
-    
     const avatar = getInitials(message.senderName || message.senderId);
-    const timestamp = formatTimestamp(message.timestamp);
-    
-    // Format content (now async)
-    const formattedContent = await formatMessageContent(message);
-    
-    messageDiv.innerHTML = `
-        <div class="message-avatar">${avatar}</div>
-        <div class="message-content">
-            <div class="message-bubble">
-                ${formattedContent}
-            </div>
-            <div class="message-info">
-                <span class="message-sender">${escapeHtml(message.senderName || message.senderId)}</span>
-                <span class="message-time">${timestamp}</span>
-            </div>
-        </div>
+
+    // System messages
+    if (message.kind === 'system') {
+        messageDiv.className = 'message system-message';
+        const text = formatSystemMessage(message);
+        messageDiv.innerHTML = `<div class="system-text">${escapeHtml(text)}</div>`;
+        return messageDiv;
+    }
+
+    // Reactions (aggregate and attach to target message later)
+    if (message.kind === 'reaction') {
+        // Handle reactions separately or aggregate them
+        return null; // Skip rendering as standalone; attach to target message
+    }
+
+    // Edits (update the original message)
+    if (message.kind === 'edit') {
+        // Find and update the original message in DOM
+        const original = document.querySelector(`[data-event-id="${message.targetEventId}"]`);
+        if (original) {
+            const bodyEl = original.querySelector('.message-body');
+            if (bodyEl) {
+                bodyEl.textContent = message.newContent.body || '';
+                bodyEl.innerHTML += ' <span class="edited">(edited)</span>';
+            }
+        }
+        return null; // Don't render as new message
+    }
+
+    // Header (sender + timestamp)
+    const header = document.createElement('div');
+    header.className = 'message-header';
+    header.innerHTML = ` 
+        <span class="sender-name">${escapeHtml(message.senderName)}</span>
+        <span class="message-time">${formatTimestamp(message.timestamp)}</span>
     `;
-    
+     header.innerHTML = `
+        <div class="message-avatar">${avatar}</div> 
+    `;
+    messageDiv.appendChild(header);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'message-body';
+
+    // Text messages
+    if (message.kind === 'text' || message.kind === 'error') {
+        if (message.html) {
+            body.innerHTML = message.html;
+        } else {
+            body.textContent = message.content;
+        }
+        if (message.isDecryptionFailure) {
+            body.classList.add('decryption-error');
+            const retryBtn = document.createElement('button');
+            retryBtn.textContent = 'Retry';
+            retryBtn.className = 'retry-decrypt-btn';
+            retryBtn.onclick = async () => {
+                // Trigger re-request and reload
+                await matrixClient.retryDecryption(message.eventId);
+                loadMessages(currentRoomId);
+            };
+            body.appendChild(retryBtn);
+        }
+    }
+
+    // Media messages
+    if (message.kind === 'media') {
+        body.classList.add('message-media');
+        const mediaEl = await createMediaElement(message);
+        if (mediaEl) body.appendChild(mediaEl);
+    }
+
+    // Call events
+    if (message.kind === 'call') {
+        body.classList.add('message-call');
+        body.textContent = formatCallEvent(message);
+    }
+
+    // Location
+    if (message.kind === 'location') {
+        body.innerHTML = `📍 <a href="${escapeHtml(message.geoUri)}" target="_blank">${escapeHtml(message.content)}</a>`;
+    }
+
+    // Unknown
+    if (message.kind === 'unknown') {
+        body.textContent = `[Unsupported: ${message.type}]`;
+        body.classList.add('unsupported');
+    }
+
+    messageDiv.appendChild(body);
     return messageDiv;
 }
 
+async function createMediaElement(message) {
+    const baseUrl = matrixClient.client.baseUrl;
+    const client = matrixClient.client;
+
+    if (message.mediaType === 'm.image') {
+        const img = document.createElement('img');
+        img.alt = message.filename;
+        img.loading = 'lazy';
+        img.style.maxWidth = '100%';
+        img.style.borderRadius = '8px';
+        
+        const url = await getMediaUrl(client, baseUrl, message.url, message.file, { width: 800, height: 600 });
+        if (url) img.src = url;
+        else img.alt = 'Failed to load image';
+        
+        return img;
+    }
+
+    if (message.mediaType === 'm.video') {
+        const video = document.createElement('video');
+        video.controls = true;
+        video.preload = 'metadata';
+        video.style.maxWidth = '100%';
+        video.style.borderRadius = '8px';
+        
+        const url = await getMediaUrl(client, baseUrl, message.url, message.file);
+        if (url) video.src = url;
+        
+        return video;
+    }
+
+    if (message.mediaType === 'm.audio') {
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.preload = 'metadata';
+        
+        const url = await getMediaUrl(client, baseUrl, message.url, message.file);
+        if (url) audio.src = url;
+        
+        return audio;
+    }
+
+    if (message.mediaType === 'm.file') {
+        const a = document.createElement('a');
+        a.textContent = `📎 ${message.filename} (${formatFileSize(message.filesize)})`;
+        a.className = 'file-download';
+        
+        const url = await getMediaUrl(client, baseUrl, message.url, message.file);
+        if (url) {
+            a.href = url;
+            a.download = message.filename;
+        }
+        
+        return a;
+    }
+
+    return null;
+}
+
+function formatSystemMessage(msg) {
+    if (msg.subtype === 'member') {
+        if (msg.membership === 'join') return `${msg.stateKey} joined`;
+        if (msg.membership === 'leave') return `${msg.stateKey} left`;
+        if (msg.membership === 'invite') return `${msg.stateKey} was invited`;
+    }
+    if (msg.subtype === 'm.room.name') return `Room name changed`;
+    if (msg.subtype === 'm.room.topic') return `Room topic changed`;
+    return 'System event';
+}
+
+function formatCallEvent(msg) {
+    if (msg.callType === 'm.call.invite') return '📞 Incoming call';
+    if (msg.callType === 'm.call.answer') return '📞 Call answered';
+    if (msg.callType === 'm.call.hangup') return '📞 Call ended';
+    return '📞 Call event';
+}
+
+function formatFileSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatTimestamp(ts) {
+    const date = new Date(ts);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    
+    if (isToday) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+           date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+   /**
+ * Convert mxc:// URL to HTTP(S)
+ */
+function mxcToHttp(client, mxcUrl, thumbnail = null) {
+    const match = mxcUrl.match(/^mxc:\/\/([^/]+)\/(.+)$/);
+    if (!match) return null;
+    const [, server, mediaId] = match;
+    
+    if (thumbnail) {
+
+            return client.mxcUrlToHttp(
+    /*mxcUrl=*/ mxcUrl, // the MXC URI to download/thumbnail, typically from an event or profile
+    /*width=*/ thumbnail.width, // part of the thumbnail API. Use as required.
+    /*height=*/ thumbnail.height, // part of the thumbnail API. Use as required.
+    /*resizeMethod=*/ undefined, // part of the thumbnail API. Use as required.
+    /*allowDirectLinks=*/ false, // should generally be left `false`.
+    /*allowRedirects=*/ true, // implied supported with authentication
+    /*useAuthentication=*/ true, // the flag we're after in this example
+);
+
+        // return `${baseUrl}/_matrix/media/v3/thumbnail/${server}/${mediaId}?width=${thumbnail.width}&height=${thumbnail.height}&method=${thumbnail.method || 'scale'}`;
+    }
+
+          return client.mxcUrlToHttp(
+    /*mxcUrl=*/ mxcUrl, // the MXC URI to download/thumbnail, typically from an event or profile
+    /*width=*/ undefined, // part of the thumbnail API. Use as required.
+    /*height=*/ undefined, // part of the thumbnail API. Use as required.
+    /*resizeMethod=*/ undefined, // part of the thumbnail API. Use as required.
+    /*allowDirectLinks=*/ false, // should generally be left `false`.
+    /*allowRedirects=*/ true, // implied supported with authentication
+    /*useAuthentication=*/ true, // the flag we're after in this example
+);
+    // return `${baseUrl}/_matrix/media/v3/download/${server}/${mediaId}`;
+}
+
+/**
+ * Get media URL (handles encrypted and unencrypted)
+ */
+async function getMediaUrl(client, baseUrl, url, file, thumbnail = null) {
+    try {
+        // Encrypted media
+        if (file) {
+            const blob = await client.downloadEncryptedContent(file);
+            return URL.createObjectURL(blob);
+        }
+        
+        // Unencrypted media
+        if (!url) return null;
+        
+        const httpUrl = mxcToHttp(client, url, thumbnail);
+        if (!httpUrl) return null;
+        
+        const response = await fetch(httpUrl, {
+            headers: {
+                'Authorization': `Bearer ${client.getAccessToken?.()}`
+            }
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+    } catch (error) {
+        console.error('Error loading media:', error);
+        return null;
+    }
+}
 /**
  * Format message content based on type
  */
